@@ -3,17 +3,18 @@ package workerpool
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/config"
+	"github.com/fagbenjaenoch/dorms-ng/internal/logger"
 	"github.com/fagbenjaenoch/dorms-ng/internal/secrets"
 	infisical "github.com/infisical/go-sdk"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/rs/zerolog"
 )
 
-func connectNATS(ctx context.Context, logger *zerolog.Logger, config *config.Config) (*nats.Conn, error) {
+func connectNATS(ctx context.Context, config *config.Config) (*nats.Conn, error) {
 	secretsClient := secrets.GetSecretClient()
 	if secretsClient == nil {
 		return nil, errors.New("secrets client is nil")
@@ -36,25 +37,27 @@ func connectNATS(ctx context.Context, logger *zerolog.Logger, config *config.Con
 		SecretPath:  config.Infisical.NATSSecretPath,
 	})
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to create or update consumer")
 		return nil, errors.New("failed to retrieve nats credentials: " + err.Error())
 	}
+
+	logger := logger.GetGlobalLogger()
 
 	nc, _ := nats.Connect(config.NATS.URL,
 		nats.UserJWTAndSeed(natsUserJWT.SecretValue, natsUserSeed.SecretValue),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2*time.Second),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			logger.Error().Err(err).Msg("nats disconnected")
+			logger.Error().Msg("nats disconnected")
 		}),
 		nats.ReconnectHandler(func(_ *nats.Conn) {
 			logger.Info().Msg("nats reconnected")
 		}),
+		nats.Name(fmt.Sprintf("%s-%s", config.Observability.AppName, config.Primary.Env)),
 	)
 	return nc, nil
 }
 
-func setupJetStream(nc *nats.Conn, logger *zerolog.Logger) (jetstream.JetStream, error) {
+func setupJetStream(nc *nats.Conn) (jetstream.JetStream, error) {
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, errors.New("failed to create jetstream: " + err.Error())
@@ -67,20 +70,38 @@ type NATSJetStream struct {
 	js jetstream.JetStream
 }
 
-func SetupNATSJetStream(ctx context.Context, logger *zerolog.Logger, config *config.Config) (*NATSJetStream, error) {
-	nc, err := connectNATS(ctx, logger, config)
+var globalNATSJetstream *NATSJetStream
+
+func SetupNATSJetStream(ctx context.Context, config *config.Config) (*NATSJetStream, error) {
+	nc, err := connectNATS(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 
-	js, err := setupJetStream(nc, logger)
+	js, err := setupJetStream(nc)
 	if err != nil {
 		return nil, err
 	}
-	return &NATSJetStream{nc: nc, js: js}, nil
+
+	globalNATSJetstream = &NATSJetStream{nc: nc, js: js}
+	return globalNATSJetstream, nil
 }
 
-func (ns *NATSJetStream) CreateConsumer(ctx context.Context, logger *zerolog.Logger, stream, consumerName string) (jetstream.Consumer, error) {
+func (ns *NATSJetStream) CreateStream(ctx context.Context, name string, subjects []string) (jetstream.Stream, error) {
+	stream, err := ns.js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     "SEARCH",
+		Subjects: subjects,
+		Storage:  jetstream.FileStorage,
+		MaxBytes: 100 * 1024 * 1024,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return stream, nil
+}
+
+func (ns *NATSJetStream) CreateConsumer(ctx context.Context, stream, consumerName string) (jetstream.Consumer, error) {
 	consumer, err := ns.js.CreateOrUpdateConsumer(ctx, stream, jetstream.ConsumerConfig{
 		Name:      consumerName,
 		AckPolicy: jetstream.AckExplicitPolicy,
@@ -90,4 +111,12 @@ func (ns *NATSJetStream) CreateConsumer(ctx context.Context, logger *zerolog.Log
 	}
 
 	return consumer, nil
+}
+
+func GetGlobalNatsJetstreamConnection() (*NATSJetStream, error) {
+	if globalNATSJetstream != nil {
+		return globalNATSJetstream, nil
+	}
+
+	return nil, errors.New("nats jetstream connection has not been initiated")
 }

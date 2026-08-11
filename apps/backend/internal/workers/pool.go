@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/fagbenjaenoch/dorms-ng/internal/utils"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/rs/zerolog"
@@ -21,22 +23,26 @@ type Handler func(ctx context.Context, msg jetstream.Msg) error
 // Pool consumes from a JetStream pull consumer and dispatches messages to
 // Handler with bounded concurrency.
 type Pool struct {
-	cfg    Config
-	js     jetstream.JetStream
-	logger *zerolog.Logger
+	cfg      *Config
+	stream   *jetstream.Stream
+	consumer *jetstream.Consumer
+	logger   *zerolog.Logger
 
 	sem chan struct{}
 	wg  sync.WaitGroup
 }
 
-// New builds a Pool. nc must already be connected; the Pool does not own
+// NewWorkerPool builds a Pool. nc must already be connected; the Pool does not own
 // its lifecycle (call nc.Close() yourself after Run returns).
-func New(ctx context.Context, njs *NATSJetStream, cfg Config, logger *zerolog.Logger) (*Pool, error) {
+func NewWorkerPool(ctx context.Context, logger *zerolog.Logger, stream *jetstream.Stream, cons *jetstream.Consumer, cfg *Config) (*Pool, error) {
+	utils.SetStructDefaults(cfg)
+	logger.Debug().Str("concurrency", strconv.Itoa(cfg.Concurrency)).Str("batch", strconv.Itoa(cfg.FetchBatchSize)).Msg("new worker pool")
 	return &Pool{
-		cfg:    cfg,
-		js:     njs.js,
-		logger: logger,
-		sem:    make(chan struct{}, cfg.Concurrency),
+		cfg:      cfg,
+		logger:   logger,
+		stream:   stream,
+		consumer: cons,
+		sem:      make(chan struct{}, cfg.Concurrency),
 	}, nil
 }
 
@@ -45,22 +51,10 @@ func New(ctx context.Context, njs *NATSJetStream, cfg Config, logger *zerolog.Lo
 // in-flight handlers finish, then returns ctx.Err(). Run is not safe to
 // call concurrently on the same Pool.
 func (p *Pool) Run(ctx context.Context, handler Handler) error {
-	cons, err := p.js.CreateOrUpdateConsumer(ctx, p.cfg.Stream, jetstream.ConsumerConfig{
-		Durable:       p.cfg.Durable,
-		FilterSubject: p.cfg.FilterSubject,
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		AckWait:       p.cfg.AckWait,
-		MaxDeliver:    p.cfg.MaxRetries,
-		MaxAckPending: p.cfg.MaxAckPending,
-		DeliverPolicy: jetstream.DeliverAllPolicy,
-	})
-	if err != nil {
-		return fmt.Errorf("workerpool: create/attach consumer %q: %w", p.cfg.Durable, err)
-	}
 
 	p.logger.Info().
-		Str("stream", p.cfg.Stream).
-		Str("durable", p.cfg.Durable).
+		Str("stream", (*p.stream).CachedInfo().Config.Name).
+		Str("durable", (*p.consumer).CachedInfo().Name).
 		Int("concurrency", p.cfg.Concurrency).
 		Int("fetch_batch", p.cfg.FetchBatchSize).
 		Int("max_ack_pending", p.cfg.MaxAckPending).
@@ -76,7 +70,7 @@ fetchLoop:
 		default:
 		}
 
-		msgs, err := cons.Fetch(p.cfg.FetchBatchSize, jetstream.FetchMaxWait(p.cfg.FetchMaxWait))
+		msgs, err := (*p.consumer).Fetch(p.cfg.FetchBatchSize, jetstream.FetchMaxWait(p.cfg.FetchMaxWait))
 		if err != nil {
 			if isBenignFetchErr(err) {
 				continue
@@ -88,7 +82,7 @@ fetchLoop:
 
 			select {
 			case <-time.After(fetchErrBackoff):
-				if fetchErrBackoff < 30*time.Second {
+				if fetchErrBackoff < p.cfg.RetryMaxDuration {
 					fetchErrBackoff *= 2
 				}
 			case <-ctx.Done():
@@ -96,7 +90,6 @@ fetchLoop:
 			}
 			continue
 		}
-		fetchErrBackoff = time.Second
 
 		for msg := range msgs.Messages() {
 			select {
@@ -110,6 +103,7 @@ fetchLoop:
 				p.handle(ctx, handler, m)
 			}(msg)
 		}
+
 		if err := msgs.Error(); err != nil && !isBenignFetchErr(err) {
 			p.logger.Warn().
 				Str("err", err.Error()).
@@ -117,11 +111,20 @@ fetchLoop:
 		}
 	}
 
+	// consumeCtx, err := p.consumer.Consume(func(msg jetstream.Msg) {
+	// 	handler(ctx, msg)
+	// })
+	// if err != nil {
+	// 	return nil
+	// }
+
 	p.logger.Info().
 		Msg("workerpool draining in-flight handlers")
 	p.wg.Wait()
 
 	return ctx.Err()
+
+	// return consumeCtx
 }
 
 func isBenignFetchErr(err error) bool {
@@ -200,9 +203,14 @@ func (p *Pool) publishDLQ(msg jetstream.Msg, cause error) {
 		Header:  headers,
 		Data:    msg.Data(),
 	}
+
+	njs, err := GetGlobalNatsJetstreamConnection()
+	if err != nil {
+		panic(err)
+	}
 	// Best-effort: DLQ publish failures are logged, not retried, so they
 	// can't themselves create unbounded backlog.
-	if _, err := p.js.PublishMsg(context.Background(), out); err != nil {
+	if _, err := njs.js.PublishMsg(context.Background(), out); err != nil {
 		p.logger.Error().
 			Str("err", err.Error()).
 			Str("subject", p.cfg.DLQSubject).
