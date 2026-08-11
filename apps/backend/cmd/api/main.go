@@ -31,14 +31,12 @@ func main() {
 
 	err = secrets.SetupSecretsManager(cfg)
 	if err != nil {
-		logger.Err(err).Msg("failed to setup secrets manager")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("failed to setup secrets manager")
 	}
 
 	db, reg, err := database.Initialize(cfg, &logger)
 	if err != nil {
-		logger.Err(err).Msg("failed to connect to database")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("failed to connect to database")
 	}
 	defer func() {
 		_ = reg.Unregister() // unregister observability at the db level
@@ -46,8 +44,7 @@ func main() {
 
 	srv, err := server.New(cfg, db, &logger)
 	if err != nil {
-		logger.Err(err).Msg("failed to create server")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("failed to create server")
 	}
 
 	obs := observability.NewObservability(srv)
@@ -55,8 +52,7 @@ func main() {
 	// setup log, metrics and trace telemetry
 	shutdownFns, err := obs.SetupObservability()
 	if err != nil {
-		logger.Err(err).Msg("failed to initialize observability")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("failed to initialize observability")
 	}
 	defer func() {
 		shutdownCtx := context.Background()
@@ -77,42 +73,32 @@ func main() {
 
 	go func() {
 		if err := srv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Err(err).Msg("failed to start server")
+			logger.Fatal().Err(err).Msg("failed to start server")
 		}
 	}()
 
-	workerCtx := context.Background()
-	njs, err := workerpool.SetupNATSJetStream(workerCtx, &logger, cfg)
+	// workers setup
+	workerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	njs, err := workerpool.SetupNATSJetStream(workerCtx, cfg)
 	if err != nil {
-		logger.Err(err).Msg("failed to setup NATS JetStream")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("failed to setup NATS JetStream")
 	}
 	logger.Info().Msg("NATS JetStream setup successfully")
 
-	searchWorkerConfig := workerpool.Config{
-		Stream:           "SEARCH",
-		Durable:          "search-worker",
-		FilterSubject:    "search.>",
-		Concurrency:      cfg.Workers.Concurrency,
-		FetchBatchSize:   cfg.Workers.FetchBatchSize,
-		FetchMaxWait:     10 * time.Second,
-		MaxAckPending:    cfg.Workers.Concurrency,
-		AckWait:          cfg.Workers.AckWait,
-		MaxRetries:       cfg.Workers.MaxRetries,
-		RetryDelay:       cfg.Workers.RetryDelay,
-		RetryMaxDuration: 30 * time.Second,
-		DLQSubject:       "search_unprocessed",
-	}
-	searchWorkers, err := workerpool.New(workerCtx, njs, searchWorkerConfig, &logger)
+	searchWorkers, err := workerpool.SetupSearchWorkers(workerCtx, njs)
 	if err != nil {
-		logger.Err(err).Msg("failed to setup search workers")
-		os.Exit(1)
+		logger.Fatal().Err(err).Msg("failed to setup search workers")
 	}
-	_ = searchWorkers.Run(workerCtx, func(ctx context.Context, msg jetstream.Msg) error {
-		logger.Debug().Msg(string(msg.Data()))
-		return nil
-	})
-	logger.Info().Str("stream", searchWorkerConfig.Stream).Msg("workers running")
+
+	go func() {
+		_ = searchWorkers.Run(workerCtx, func(ctx context.Context, msg jetstream.Msg) error {
+			logger.Info().Str("subject", msg.Subject()).Str("msg", string(msg.Data())).Msg("received a stream message")
+			_ = msg.Ack()
+			return nil
+		})
+	}()
 
 	// shutdown sequence
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -121,7 +107,7 @@ func main() {
 	logger.Info().Msg("server shutting down...")
 
 	// Doesn't block if no connections, but will otherwise wait until the timeout deadline
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultContextTimeout*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), DefaultContextTimeout*time.Second)
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Err(err).Msg("failed to shutdown server")
 	}
