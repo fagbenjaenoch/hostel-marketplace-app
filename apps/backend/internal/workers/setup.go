@@ -103,9 +103,8 @@ func (ns *NATSJetStream) CreateStream(ctx context.Context, name string, subjects
 
 func (ns *NATSJetStream) CreateConsumer(ctx context.Context, stream, consumerName string) (jetstream.Consumer, error) {
 	consumer, err := ns.js.CreateOrUpdateConsumer(ctx, stream, jetstream.ConsumerConfig{
-		Name:              consumerName,
-		AckPolicy:         jetstream.AckExplicitPolicy,
-		InactiveThreshold: 0,
+		Durable:   consumerName,
+		AckPolicy: jetstream.AckExplicitPolicy,
 	})
 	if err != nil {
 		return nil, err
