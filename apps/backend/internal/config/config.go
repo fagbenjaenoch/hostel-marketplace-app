@@ -79,9 +79,9 @@ type NATS struct {
 type Workers struct {
 	Concurrency    int           `koanf:"concurrency" default:"5"`
 	FetchBatchSize int           `koanf:"fetch_batch_size" default:"5"`
-	AckWait        time.Duration `koanf:"ack_wait" default:"10s"`
+	AckWait        time.Duration `koanf:"ack_wait" default:"10"`
 	MaxRetries     int           `koanf:"max_retries" default:"3"`
-	RetryDelay     time.Duration `koanf:"retry_delay" default:"5s"`
+	RetryDelay     time.Duration `koanf:"retry_delay" default:"5"`
 	MaxAckPending  int           `koanf:"max_ack_pending" default:"10"`
 }
 
