@@ -93,11 +93,13 @@ func main() {
 	}
 
 	go func() {
-		_ = searchWorkers.Run(workerCtx, func(ctx context.Context, msg jetstream.Msg) error {
+		err = searchWorkers.Run(workerCtx, func(ctx context.Context, msg jetstream.Msg) error {
 			logger.Info().Str("subject", msg.Subject()).Str("msg", string(msg.Data())).Msg("received a stream message")
-			_ = msg.Ack()
 			return nil
 		})
+		if err != nil {
+			logger.Fatal().Err(err).Msg("search workers failed")
+		}
 	}()
 
 	// shutdown sequence

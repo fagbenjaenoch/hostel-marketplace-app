@@ -2,7 +2,6 @@ package workerpool
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -51,7 +50,6 @@ func NewWorkerPool(ctx context.Context, logger *zerolog.Logger, stream *jetstrea
 // in-flight handlers finish, then returns ctx.Err(). Run is not safe to
 // call concurrently on the same Pool.
 func (p *Pool) Run(ctx context.Context, handler Handler) error {
-
 	p.logger.Info().
 		Str("stream", (*p.stream).CachedInfo().Config.Name).
 		Str("durable", (*p.consumer).CachedInfo().Name).
@@ -60,77 +58,42 @@ func (p *Pool) Run(ctx context.Context, handler Handler) error {
 		Int("max_ack_pending", p.cfg.MaxAckPending).
 		Msg("workerpool starting")
 
-	fetchErrBackoff := time.Second
-
-fetchLoop:
-	for {
-		select {
-		case <-ctx.Done():
-			break fetchLoop
-		default:
-		}
-
-		msgs, err := (*p.consumer).Fetch(p.cfg.FetchBatchSize, jetstream.FetchMaxWait(p.cfg.FetchMaxWait))
-		if err != nil {
-			if isBenignFetchErr(err) {
-				continue
-			}
-			p.logger.Warn().
-				Str("err", err.Error()).
-				Str("backoff", fetchErrBackoff.String()).
-				Msg("fetch error, backing off")
-
-			select {
-			case <-time.After(fetchErrBackoff):
-				if fetchErrBackoff < p.cfg.RetryMaxDuration {
-					fetchErrBackoff *= 2
-				}
-			case <-ctx.Done():
-				break fetchLoop
-			}
-			continue
-		}
-
-		for msg := range msgs.Messages() {
-			select {
-			case p.sem <- struct{}{}:
-			case <-ctx.Done():
-				break fetchLoop
-			}
-			p.wg.Add(1)
-			go func(m jetstream.Msg) {
-				defer func() { <-p.sem; p.wg.Done() }()
-				p.handle(ctx, handler, m)
-			}(msg)
-		}
-
-		if err := msgs.Error(); err != nil && !isBenignFetchErr(err) {
-			p.logger.Warn().
-				Str("err", err.Error()).
-				Msg("batch completed with error")
-		}
+	consumeOpts := []jetstream.PullConsumeOpt{
+		jetstream.PullMaxMessages(100),
 	}
 
-	// consumeCtx, err := p.consumer.Consume(func(msg jetstream.Msg) {
-	// 	handler(ctx, msg)
-	// })
-	// if err != nil {
-	// 	return nil
-	// }
+	consumeCtx, err := (*p.consumer).Consume(func(msg jetstream.Msg) {
+
+		// Acquire semaphore (block until a slot is free or ctx cancels).
+		select {
+		case p.sem <- struct{}{}:
+		case <-ctx.Done():
+			return
+		}
+
+		p.wg.Add(1)
+		go func(m jetstream.Msg) {
+			defer func() {
+				<-p.sem
+				p.wg.Done()
+			}()
+
+			p.handle(ctx, handler, m)
+		}(msg)
+
+	}, consumeOpts...)
+	if err != nil {
+		return err
+	}
+	defer consumeCtx.Stop()
+
+	<-ctx.Done()
 
 	p.logger.Info().
 		Msg("workerpool draining in-flight handlers")
 	p.wg.Wait()
 
 	return ctx.Err()
-
-	// return consumeCtx
-}
-
-func isBenignFetchErr(err error) bool {
-	return errors.Is(err, context.DeadlineExceeded) ||
-		errors.Is(err, nats.ErrTimeout) ||
-		errors.Is(err, jetstream.ErrNoMessages)
 }
 
 // handle runs one message through the handler with panic recovery, a
