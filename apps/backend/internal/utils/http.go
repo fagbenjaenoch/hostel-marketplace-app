@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/dto"
 )
@@ -55,4 +56,16 @@ func GetValidatedPayloadFromRequest[T any](ctx context.Context) (T, error) {
 		return payload, errors.New("invalid payload")
 	}
 	return payload, nil
+}
+
+func SkipTelemetry(r *http.Request) bool {
+	if r.URL.Path == "/health" || r.URL.Path == "/metrics" {
+		return false
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/docs/") {
+		return false
+	}
+
+	return true
 }
