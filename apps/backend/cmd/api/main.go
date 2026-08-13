@@ -16,7 +16,6 @@ import (
 	"github.com/fagbenjaenoch/dorms-ng/internal/secrets"
 	"github.com/fagbenjaenoch/dorms-ng/internal/server"
 	workerpool "github.com/fagbenjaenoch/dorms-ng/internal/workers"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 const DefaultContextTimeout = 10
@@ -87,20 +86,10 @@ func main() {
 	}
 	logger.Info().Msg("NATS JetStream setup successfully")
 
-	searchWorkers, err := workerpool.SetupSearchWorkers(workerCtx, njs)
+	err = workerpool.Start(workerCtx, njs)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to setup search workers")
+		logger.Error().Err(err).Msg("workers failed")
 	}
-
-	go func() {
-		err = searchWorkers.Run(workerCtx, func(ctx context.Context, msg jetstream.Msg) error {
-			logger.Info().Str("subject", msg.Subject()).Str("msg", string(msg.Data())).Msg("received a stream message")
-			return nil
-		})
-		if err != nil {
-			logger.Fatal().Err(err).Msg("search workers failed")
-		}
-	}()
 
 	// shutdown sequence
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
