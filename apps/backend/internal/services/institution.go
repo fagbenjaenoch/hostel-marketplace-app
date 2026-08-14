@@ -8,6 +8,7 @@ import (
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/dto"
 	"github.com/fagbenjaenoch/dorms-ng/internal/repositories"
+	workerpool "github.com/fagbenjaenoch/dorms-ng/internal/workers"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 )
@@ -17,12 +18,14 @@ var institutionTracer = otel.Tracer("institution_service")
 type InstitutionService struct {
 	repo   *repositories.InstitutionRepository
 	Logger *zerolog.Logger
+	njs    *workerpool.NATSJetStream
 }
 
-func NewInstitutionService(db *sql.DB, logger *zerolog.Logger) *InstitutionService {
+func NewInstitutionService(db *sql.DB, logger *zerolog.Logger, njs *workerpool.NATSJetStream) *InstitutionService {
 	return &InstitutionService{
 		repo:   repositories.NewInstitutionRepository(db, logger),
 		Logger: logger,
+		njs:    njs,
 	}
 }
 
@@ -55,6 +58,22 @@ func (s InstitutionService) CreateInstitution(ctx context.Context, institution d
 			Success: false,
 			Status:  http.StatusInternalServerError,
 			Message: "failed to create institution",
+			Payload: nil,
+		}, err
+	}
+
+	err = s.njs.PublishMessage(ctx, s.Logger, dto.SearchEvent{
+		EventType: "institution.create",
+		EventPayload: dto.SearchEventPayload{
+			Name: i.Name,
+		},
+	})
+
+	if err != nil {
+		return dto.StructuredResponse{
+			Success: false,
+			Status:  http.StatusInternalServerError,
+			Message: "failed to publish event",
 			Payload: nil,
 		}, err
 	}

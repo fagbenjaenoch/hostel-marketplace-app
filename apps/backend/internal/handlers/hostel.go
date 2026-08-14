@@ -21,7 +21,7 @@ func NewHostelHandler(s *server.Server) HostelHandler {
 		BaseHandler: BaseHandler{
 			server: s,
 		},
-		service: services.NewHostelService(s.DB, s.Logger),
+		service: services.NewHostelService(s.DB, s.Logger, s.NJS),
 	}
 }
 

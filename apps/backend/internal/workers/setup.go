@@ -119,8 +119,8 @@ type Event interface {
 	Payload() []byte
 }
 
-func (njs *NATSJetStream) PublishMessage(logger *zerolog.Logger, event Event) error {
-	ack, err := njs.js.Publish(context.Background(), event.Type(), event.Payload())
+func (njs *NATSJetStream) PublishMessage(ctx context.Context, logger *zerolog.Logger, event Event) error {
+	ack, err := njs.js.Publish(ctx, event.Type(), event.Payload())
 	if err != nil {
 		return err
 	}

@@ -58,7 +58,7 @@ func SetupTestContainer(t *testing.T) *TestContainerSetup {
 	_ = reg
 
 	// 4. Create Server
-	srv, err := server.New(cfg, db, logger)
+	srv, err := server.New(cfg, db, logger, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

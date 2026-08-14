@@ -24,10 +24,11 @@ type HostelService struct {
 	njs    *workerpool.NATSJetStream
 }
 
-func NewHostelService(db *sql.DB, logger *zerolog.Logger) *HostelService {
+func NewHostelService(db *sql.DB, logger *zerolog.Logger, njs *workerpool.NATSJetStream) *HostelService {
 	return &HostelService{
 		repo:   repositories.NewHostelRepository(db, logger),
 		Logger: logger,
+		njs:    njs,
 	}
 }
 
@@ -64,14 +65,14 @@ func (s HostelService) CreateHostel(ctx context.Context, hostel dto.CreateHostel
 		}, err
 	}
 
-	err = s.njs.PublishMessage(s.Logger, dto.SearchEvent{
-		EventType: "search.created",
+	err = s.njs.PublishMessage(ctx, s.Logger, dto.SearchEvent{
+		EventType: "hostel.create",
 		EventPayload: dto.SearchEventPayload{
 			Name: h.Name,
 		},
 	})
 	if err != nil {
-		s.Logger.Err(err).Msg("failed to publish search.created message")
+		s.Logger.Err(err).Msg("failed to publish hostel.create message")
 		return dto.StructuredResponse{
 			Success: false,
 			Status:  http.StatusInternalServerError,
