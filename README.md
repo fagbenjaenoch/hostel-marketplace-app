@@ -123,7 +123,7 @@ All HTTP requests and DB queries are instrumented with **OpenTelemetry**.
 
 ## What I think of implementing
 
-- **Async Job Queue:** Introduce **NATS / RabbitMQ** with a go worker pool to handle email confirmations and SMS notifications asynchronously. Currently these happen in‑request, which adds latency.
+- **Async Job Queue:** Introduce **NATS / RabbitMQ** with a go worker pool to handle email confirmations and SMS notifications asynchronously. Currently these happen in‑request, which adds latency (Currently in progress at [#19](https://github.com/fagbenjaenoch/dorms-ng/pull/19)).
 - **OpenAPI / Swagger:** Autogenerate OpenAPI specs from Gin routes and serve a Swagger UI, making API exploration instantly accessible to frontend engineers.
 - **Cache:** Cache frequently requested searches e.g trending hostels to reduce DB traffic and improve overall performance and UX.
 
