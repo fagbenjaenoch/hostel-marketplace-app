@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/config"
+	workerpool "github.com/fagbenjaenoch/dorms-ng/internal/workers"
 	"github.com/rs/zerolog"
 )
 
@@ -16,13 +17,15 @@ type Server struct {
 	httpServer *http.Server
 	Logger     *zerolog.Logger
 	DB         *sql.DB
+	NJS        *workerpool.NATSJetStream
 }
 
-func New(config *config.Config, db *sql.DB, logger *zerolog.Logger) (*Server, error) {
+func New(config *config.Config, db *sql.DB, logger *zerolog.Logger, njs *workerpool.NATSJetStream) (*Server, error) {
 	return &Server{
 		Config: config,
 		Logger: logger,
 		DB:     db,
+		NJS:    njs,
 	}, nil
 }
 

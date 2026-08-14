@@ -41,7 +41,22 @@ func main() {
 		_ = reg.Unregister() // unregister observability at the db level
 	}()
 
-	srv, err := server.New(cfg, db, &logger)
+	// workers setup
+	workerCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	njs, err := workerpool.SetupNATSJetStream(workerCtx, cfg)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to setup NATS JetStream")
+	}
+	logger.Info().Msg("NATS JetStream setup successfully")
+
+	err = workerpool.Start(workerCtx, njs)
+	if err != nil {
+		logger.Error().Err(err).Msg("workers failed")
+	}
+
+	srv, err := server.New(cfg, db, &logger, njs)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to create server")
 	}
@@ -75,21 +90,6 @@ func main() {
 			logger.Fatal().Err(err).Msg("failed to start server")
 		}
 	}()
-
-	// workers setup
-	workerCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	njs, err := workerpool.SetupNATSJetStream(workerCtx, cfg)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to setup NATS JetStream")
-	}
-	logger.Info().Msg("NATS JetStream setup successfully")
-
-	err = workerpool.Start(workerCtx, njs)
-	if err != nil {
-		logger.Error().Err(err).Msg("workers failed")
-	}
 
 	// shutdown sequence
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
