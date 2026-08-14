@@ -12,6 +12,7 @@ import (
 	infisical "github.com/infisical/go-sdk"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/rs/zerolog"
 )
 
 func connectNATS(ctx context.Context, config *config.Config) (*nats.Conn, error) {
@@ -111,6 +112,21 @@ func (ns *NATSJetStream) CreateConsumer(ctx context.Context, stream, consumerNam
 	}
 
 	return consumer, nil
+}
+
+type Event interface {
+	Type() string
+	Payload() []byte
+}
+
+func (njs *NATSJetStream) PublishMessage(logger *zerolog.Logger, event Event) error {
+	ack, err := njs.js.Publish(context.Background(), event.Type(), event.Payload())
+	if err != nil {
+		return err
+	}
+
+	logger.Info().Msgf("message stored in %s at sequence %d", ack.Stream, ack.Sequence)
+	return nil
 }
 
 func GetGlobalNatsJetstreamConnection() (*NATSJetStream, error) {

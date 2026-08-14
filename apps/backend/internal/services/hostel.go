@@ -11,6 +11,7 @@ import (
 	"github.com/fagbenjaenoch/dorms-ng/internal/middleware"
 	"github.com/fagbenjaenoch/dorms-ng/internal/repositories"
 	"github.com/fagbenjaenoch/dorms-ng/internal/utils"
+	workerpool "github.com/fagbenjaenoch/dorms-ng/internal/workers"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 )
@@ -20,6 +21,7 @@ var hostelTracer = otel.Tracer("hostel_service")
 type HostelService struct {
 	repo   *repositories.HostelRepository
 	Logger *zerolog.Logger
+	njs    *workerpool.NATSJetStream
 }
 
 func NewHostelService(db *sql.DB, logger *zerolog.Logger) *HostelService {
@@ -54,6 +56,22 @@ func (s HostelService) CreateHostel(ctx context.Context, hostel dto.CreateHostel
 
 	h, err := s.repo.CreateHostel(ctx, hostel)
 	if err != nil {
+		return dto.StructuredResponse{
+			Success: false,
+			Status:  http.StatusInternalServerError,
+			Message: "failed to create hostel",
+			Payload: nil,
+		}, err
+	}
+
+	err = s.njs.PublishMessage(s.Logger, dto.SearchEvent{
+		EventType: "search.created",
+		EventPayload: dto.SearchEventPayload{
+			Name: h.Name,
+		},
+	})
+	if err != nil {
+		s.Logger.Err(err).Msg("failed to publish search.created message")
 		return dto.StructuredResponse{
 			Success: false,
 			Status:  http.StatusInternalServerError,
@@ -127,7 +145,6 @@ func (s HostelService) SearchHostels(ctx context.Context, searchType, id string,
 
 	switch searchType {
 	case "institution":
-		s.Logger.Debug().Msg("Searching hostels by institution")
 		res, err = s.repo.Queries.GetHostelsByInstitution(ctx, models.GetHostelsByInstitutionParams{
 			Limit:         int32(paginationParams.Limit),
 			Offset:        int32(paginationParams.Offset),
@@ -143,7 +160,6 @@ func (s HostelService) SearchHostels(ctx context.Context, searchType, id string,
 		}
 
 	case "neighborhood":
-		s.Logger.Debug().Msg("Searching hostels by neighborhood")
 		res, err = s.repo.Queries.GetHostelsByNeighborhood(ctx, models.GetHostelsByNeighborhoodParams{
 			Limit:          int32(paginationParams.Limit),
 			Offset:         int32(paginationParams.Offset),
