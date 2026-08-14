@@ -16,6 +16,7 @@ import LandingSearchDropdown from "./LandingSearchDropdown";
 import { useState } from "react";
 import { useClickOutside } from "@/lib/hooks/useClickOutside";
 import useRecentSearches from "@/lib/hooks/useRecentSearches";
+import { Spinner } from "./ui/spinner";
 
 export default function LandingSearch() {
   const [showDropdown, setShowDropdown] = useState(false);
@@ -103,7 +104,11 @@ export default function LandingSearch() {
           onFocus={() => setShowDropdown(true)}
         />
         <InputGroupAddon size="xl">
-          <Search size={20} className="text-primary" />
+          {query.isFetching ? (
+            <Spinner className="text-primary size-4" />
+          ) : (
+            <Search size={20} className="text-primary" />
+          )}
         </InputGroupAddon>
         {searchTerm.length > 0 && (
           <InputGroupAddon align="inline-end">
