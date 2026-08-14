@@ -11,7 +11,7 @@ import (
 )
 
 func SetupSearchWorkers(ctx context.Context, njs *NATSJetStream) (*Pool, error) {
-	searchStream, err := njs.CreateStream(ctx, "SEARCH", []string{"search.>"})
+	searchStream, err := njs.CreateStream(ctx, "SEARCH", []string{"search.>", "hostel.create", "institution.create"})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create stream: %s", err.Error())
 	}
