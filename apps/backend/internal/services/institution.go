@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/dto"
@@ -40,7 +41,7 @@ func (s InstitutionService) CreateInstitution(ctx context.Context, institution d
 			Status:  http.StatusInternalServerError,
 			Message: "failed to check if institution exists",
 			Payload: nil,
-		}, err
+		}, fmt.Errorf("failed to check if institution exists: %s", err.Error())
 	}
 
 	if institutionExists {
@@ -59,7 +60,7 @@ func (s InstitutionService) CreateInstitution(ctx context.Context, institution d
 			Status:  http.StatusInternalServerError,
 			Message: "failed to create institution",
 			Payload: nil,
-		}, err
+		}, fmt.Errorf("repo.CreateInstitution error: %s", err.Error())
 	}
 
 	err = s.njs.PublishMessage(ctx, s.Logger, dto.SearchEvent{
@@ -75,7 +76,7 @@ func (s InstitutionService) CreateInstitution(ctx context.Context, institution d
 			Status:  http.StatusInternalServerError,
 			Message: "failed to publish event",
 			Payload: nil,
-		}, err
+		}, fmt.Errorf("failed to publish event: %s", err.Error())
 	}
 
 	return dto.StructuredResponse{
