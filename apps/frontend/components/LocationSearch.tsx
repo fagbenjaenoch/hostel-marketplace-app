@@ -3,12 +3,14 @@
 import { SearchIcon, X } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "./ui/input-group";
 import { Button } from "./ui/button";
+import { Spinner } from "./ui/spinner";
 
 interface LocationSearchProps {
   searchTerm: string;
   clearSearch: () => void;
   handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClick: (e: React.MouseEvent<HTMLInputElement>) => void;
+  isFetching: boolean;
 }
 
 export default function LocationSearch({
@@ -16,6 +18,7 @@ export default function LocationSearch({
   clearSearch,
   handleChange,
   onClick,
+  isFetching,
 }: LocationSearchProps) {
   return (
     <InputGroup size="lg">
@@ -26,7 +29,7 @@ export default function LocationSearch({
         onClick={onClick}
       />
       <InputGroupAddon>
-        <SearchIcon />
+        {isFetching ? <Spinner className="size-4" /> : <SearchIcon />}
       </InputGroupAddon>
       {searchTerm.length > 0 && (
         <InputGroupAddon align="inline-end">

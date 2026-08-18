@@ -84,6 +84,7 @@ export default function SearchPage() {
                   handleChange={e => setAreaFilters({ searchTerm: e.target.value })}
                   clearSearch={clearSearch}
                   onClick={showDropdownOnClick}
+                  isFetching={query.isFetching}
                 />
                 {showDropdown &&
                   areaFilters.searchTerm &&
