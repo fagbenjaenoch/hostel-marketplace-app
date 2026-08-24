@@ -9,6 +9,7 @@ import (
 	"github.com/fagbenjaenoch/dorms-ng/internal/config"
 	"github.com/fagbenjaenoch/dorms-ng/internal/logger"
 	"github.com/fagbenjaenoch/dorms-ng/internal/secrets"
+	"github.com/fagbenjaenoch/dorms-ng/internal/utils"
 	infisical "github.com/infisical/go-sdk"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -16,6 +17,27 @@ import (
 )
 
 func connectNATS(ctx context.Context, config *config.Config) (*nats.Conn, error) {
+	logger := logger.GetGlobalLogger()
+
+	var nc *nats.Conn
+
+	if !utils.IsProduction() {
+		nc, err := nats.Connect(config.NATS.URL,
+			nats.Name(fmt.Sprintf("%s-%s", config.Observability.AppName, config.Primary.Env)),
+			nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
+				logger.Error().Msg("nats disconnected")
+			}),
+			nats.ReconnectHandler(func(_ *nats.Conn) {
+				logger.Info().Msg("nats reconnected")
+			}),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		logger.Debug().Msg("connected to nats local")
+		return nc, nil
+	}
 	secretsClient := secrets.GetSecretClient()
 	if secretsClient == nil {
 		return nil, errors.New("secrets client is nil")
@@ -41,9 +63,8 @@ func connectNATS(ctx context.Context, config *config.Config) (*nats.Conn, error)
 		return nil, errors.New("failed to retrieve nats credentials: " + err.Error())
 	}
 
-	logger := logger.GetGlobalLogger()
-
-	nc, _ := nats.Connect(config.NATS.URL,
+	nc, err = nats.Connect(config.NATS.URL,
+		nats.Name(fmt.Sprintf("%s-%s", config.Observability.AppName, config.Primary.Env)),
 		nats.UserJWTAndSeed(natsUserJWT.SecretValue, natsUserSeed.SecretValue),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2*time.Second),
@@ -53,8 +74,11 @@ func connectNATS(ctx context.Context, config *config.Config) (*nats.Conn, error)
 		nats.ReconnectHandler(func(_ *nats.Conn) {
 			logger.Info().Msg("nats reconnected")
 		}),
-		nats.Name(fmt.Sprintf("%s-%s", config.Observability.AppName, config.Primary.Env)),
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to nats: %w", err)
+	}
+
 	return nc, nil
 }
 
