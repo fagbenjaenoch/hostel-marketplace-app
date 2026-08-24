@@ -35,8 +35,8 @@ type argon2Params struct {
 
 func generateRandomSalt() []byte {
 	salt := make([]byte, 16)
-	rand.Read(salt)
-	return salt
+	n, _ := rand.Read(salt)
+	return salt[:n]
 }
 
 // encode hash in base64 and return encoded string

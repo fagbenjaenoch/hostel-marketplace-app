@@ -28,6 +28,11 @@ func TestLoadConfig_Valid(t *testing.T) {
 	os.Setenv("APP_R2.ENDPOINT", "https://test.r2.cloudflarestorage.com")
 	os.Setenv("APP_DB.URI", "postgres://user:pass@localhost:5432/db")
 	os.Setenv("APP_DB.NAME", "test-db")
+	os.Setenv("APP_INFISICAL.CLIENT_ID", "infisical-client-id")
+	os.Setenv("APP_INFISICAL.CLIENT_SECRET", "infisical-client-secret")
+	os.Setenv("APP_INFISICAL.PROJECT_ID", "test-project-id")
+	os.Setenv("APP_INFISICAL.NATS_SECRET_PATH", "/nats-secret-path")
+	os.Setenv("APP_NATS.URL", "nats://localhost:4222")
 
 	cfg, err := config.LoadConfig()
 	if err != nil {

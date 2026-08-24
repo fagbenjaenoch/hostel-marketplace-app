@@ -171,11 +171,17 @@ func (o *Observability) InitMetrics(ctx context.Context, res *resource.Resource)
 	err = runtimeMetrics.Start(
 		runtimeMetrics.WithMeterProvider(mp),
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	if utils.IsProduction() {
 		err = hostMetrics.Start(
 			hostMetrics.WithMeterProvider(mp),
 		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Set as the global MeterProvider

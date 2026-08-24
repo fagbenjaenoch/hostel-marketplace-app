@@ -46,7 +46,7 @@ func (nr *NeighborhoodRepository) CreateNeighborhood(ctx context.Context, neighb
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	qtx := nr.BaseRepository.Queries.WithTx(tx)
 

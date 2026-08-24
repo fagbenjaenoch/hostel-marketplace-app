@@ -13,7 +13,9 @@ type HostelFilterParams struct {
 	IsVerified bool
 }
 
-const HostelFilterKey = "hostelFilters"
+type HostelFilterKeyType string
+
+const HostelFilterKey HostelFilterKeyType = "hostelFilters"
 
 func HostelFilter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

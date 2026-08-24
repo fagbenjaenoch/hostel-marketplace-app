@@ -46,7 +46,7 @@ func (ir *InstitutionRepository) CreateInstitution(ctx context.Context, institut
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	qtx := ir.BaseRepository.Queries.WithTx(tx)
 

@@ -21,7 +21,7 @@ func NewHostelHandler(s *server.Server) HostelHandler {
 		BaseHandler: BaseHandler{
 			server: s,
 		},
-		service: services.NewHostelService(s.DB, s.Logger),
+		service: services.NewHostelService(s.DB, s.Logger, s.NJS),
 	}
 }
 
@@ -71,15 +71,6 @@ func (h *HostelHandler) SearchHostels(w http.ResponseWriter, r *http.Request) {
 	id := r.URL.Query().Get(utils.AreaParam.String())
 	pagination := middleware.GetPaginationParams(r.Context())
 	hostelFilters := middleware.GetHostelFilterParams(r.Context())
-
-	h.server.Logger.Debug().
-		Str("typ", typ).
-		Str("id", id).
-		Int("page", pagination.Page).
-		Str("sortBy", hostelFilters.SortBy).
-		Int("minPrice", hostelFilters.MinPrice).
-		Int("maxPrice", hostelFilters.MaxPrice).
-		Msg("searching hostels")
 
 	res, err := h.service.SearchHostels(r.Context(), typ, id, hostelFilters, pagination)
 	if err != nil {

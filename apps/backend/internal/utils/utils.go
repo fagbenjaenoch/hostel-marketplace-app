@@ -6,7 +6,8 @@ import (
 	"encoding/json"
 	pkgError "errors"
 	"fmt"
-	"net/http"
+	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/config"
@@ -91,18 +92,6 @@ func GenerateHash(input string) string {
 	return base64.RawURLEncoding.Strict().EncodeToString(h.Sum(nil))
 }
 
-func SkipTelemetry(r *http.Request) bool {
-	if r.URL.Path == "/health" || r.URL.Path == "/metrics" {
-		return false
-	}
-
-	if strings.HasPrefix(r.URL.Path, "/docs/") {
-		return false
-	}
-
-	return true
-}
-
 func StringsToNullRawMessage(strings []string) (pqtype.NullRawMessage, error) {
 	var result pqtype.NullRawMessage
 
@@ -134,4 +123,37 @@ func NullRawMessageToStrings(nrm pqtype.NullRawMessage) []string {
 	}
 
 	return result
+}
+
+func SetStructDefaults(s interface{}) {
+	v := reflect.ValueOf(s)
+	if v.Kind() != reflect.Ptr || v.IsNil() {
+		return
+	}
+
+	v = v.Elem()
+	t := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		tag := t.Field(i).Tag.Get("default")
+
+		if tag != "" && field.IsZero() {
+			switch field.Kind() {
+			case reflect.String:
+				field.SetString(tag)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				if i, err := strconv.ParseInt(tag, 10, 64); err == nil {
+					field.SetInt(i)
+				}
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				if u, err := strconv.ParseUint(tag, 10, 64); err == nil {
+					field.SetUint(u)
+				}
+			case reflect.Float32, reflect.Float64:
+				if f, err := strconv.ParseFloat(tag, 64); err == nil {
+					field.SetFloat(f)
+				}
+			}
+		}
+	}
 }

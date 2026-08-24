@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/fagbenjaenoch/dorms-ng/internal/dto"
 )
@@ -26,13 +27,13 @@ func WriteJSON(w http.ResponseWriter, response dto.StructuredResponse) {
 
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error"))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.Status)
-	w.Write(responseJSON)
+	_, _ = w.Write(responseJSON)
 }
 
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, body any) error {
@@ -55,4 +56,16 @@ func GetValidatedPayloadFromRequest[T any](ctx context.Context) (T, error) {
 		return payload, errors.New("invalid payload")
 	}
 	return payload, nil
+}
+
+func SkipTelemetry(r *http.Request) bool {
+	if r.URL.Path == "/health" || r.URL.Path == "/metrics" {
+		return false
+	}
+
+	if strings.HasPrefix(r.URL.Path, "/docs/") {
+		return false
+	}
+
+	return true
 }

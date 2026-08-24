@@ -20,7 +20,7 @@ func NewInstitutionHandler(s *server.Server) InstitutionHandler {
 		BaseHandler: BaseHandler{
 			server: s,
 		},
-		service: services.NewInstitutionService(s.DB, s.Logger),
+		service: services.NewInstitutionService(s.DB, s.Logger, s.NJS),
 	}
 }
 

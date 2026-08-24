@@ -43,7 +43,7 @@ func (hr *HostelRepository) CreateHostel(ctx context.Context, hostel dto.CreateH
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	qtx := hr.BaseRepository.Queries.WithTx(tx)
 

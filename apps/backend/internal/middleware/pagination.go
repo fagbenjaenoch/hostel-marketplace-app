@@ -14,7 +14,10 @@ type PaginationParams struct {
 
 const maxLimit = 20
 const maxPriceLimit = 5000000
-const PaginationKey = "pagination"
+
+type PaginationKeyType string
+
+const PaginationKey PaginationKeyType = "pagination"
 
 func Pagination(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
