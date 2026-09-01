@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"embed"
+	"time"
 
 	"github.com/XSAM/otelsql"
 	"github.com/fagbenjaenoch/dorms-ng/internal/config"
@@ -25,6 +26,11 @@ func newDB(config *config.Config, logger *zerolog.Logger) (*sql.DB, metric.Regis
 	if err != nil {
 		return nil, nil, err
 	}
+
+	db.SetMaxOpenConns(20)
+	db.SetMaxIdleConns(20)
+	db.SetConnMaxLifetime(10 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
 	reg, err := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(
 		semconv.DBSystemNamePostgreSQL,
