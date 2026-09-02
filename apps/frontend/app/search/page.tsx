@@ -103,7 +103,7 @@ export default function SearchPage() {
                             })
                           }
                         >
-                          <MapPin size={12} />
+                          <MapPin size={12} className="shrink-0" />
                           <span className="text-sm">{searchResult.name}</span>
                         </div>
                       ))}
