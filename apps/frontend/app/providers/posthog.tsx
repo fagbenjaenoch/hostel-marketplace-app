@@ -5,12 +5,5 @@ export function PHProvider({ children }: { children: React.ReactNode }) {
     return <>{children}</>;
   }
 
-  return (
-    <PostHogProvider
-      apiKey={process.env.NEXT_PUBLIC_POSTHOG_KEY!}
-      clientOptions={{ api_host: "/ingest" }}
-    >
-      {children}
-    </PostHogProvider>
-  );
+  return <PostHogProvider>{children}</PostHogProvider>;
 }
